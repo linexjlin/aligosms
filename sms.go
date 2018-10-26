@@ -150,7 +150,7 @@ func SendMsg(protocol, domain, regionId, accKey, accSecret, signName, tempCode, 
 	//注意：签名也要做特殊URL编码
 	sign := Sign(accSecret, stringToSign)
 	requestUri := protocol + "://" + domain + "/?"
-	requestUri += urlParamsStr + "&" + SpecialUrlEncode("Signature") + "=" + sign
+	requestUri += urlParamsStr + "&" + SpecialUrlEncode(KeySignature) + "=" + sign
 
 	//6.请求并解析响应
 	resp := requestSendMsg(requestUri)

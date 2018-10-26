@@ -30,3 +30,7 @@ An Aliyun Short Message SDK by golang.
         	params)
 
 ```
+
+## Remark
+
+https://github.com/leonzhangxf/aligosms

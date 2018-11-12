@@ -57,6 +57,7 @@ const (
 	DefaultProtocol         = "http"
 )
 
+//请求调用异常列表
 var (
 	ParamsMarshallError     = errors.New("params marshall error")
 	GetTimeLocationError    = errors.New("get time location error")
@@ -71,14 +72,15 @@ var (
 type SendSmsResponse struct {
 	XMLNameSendSMSResponse xml.Name `xml:"SendSMSResponse"`
 	XMLNameError           xml.Name `xml:"Error"`
-	RequestId              string   `xml:"RequestId"`
-	BizId                  string   `xml:"BizId"`
-	Code                   string   `xml:"Code"`
-	Message                string   `xml:"Message"`
-	HostId                 string   `xml:"HostId"`
-	Recommend              string   `xml:"Recommend"`
+	RequestId              string   `xml:"RequestId"` //请求唯一识别ID
+	BizId                  string   `xml:"BizId"`     //业务调用方唯一识别ID
+	Code                   string   `xml:"Code"`      //响应码，正常返回“OK”
+	Message                string   `xml:"Message"`   //响应信息，正常返回“OK”
+	HostId                 string   `xml:"HostId"`    //请求异常时，返回的请求域名
+	Recommend              string   `xml:"Recommend"` //异常时的提示
 }
 
+//输出请求响应详情
 func (resp *SendSmsResponse) String() string {
 	str := "SendSmsResponse = { " + " \n	RequestId: " + resp.RequestId
 	str += " \n	BizId: " + resp.BizId
@@ -108,16 +110,27 @@ var DefaultMessageSender = &MessageSender{
 }
 
 // 创建短信发送器
-func NewMessageSender() MessageSender {
+func NewMessageSender(protocol, domain, regionId, accKey, accSecret string) MessageSender {
 	return MessageSender{
-		Protocol: DefaultProtocol,
-		Domain:   DefaultDomain,
-		RegionId: DefaultRegionId,
+		Protocol:     protocol,
+		Domain:       domain,
+		RegionId:     regionId,
+		AccessKeyId:  accKey,
+		AccessSecret: accSecret,
 	}
 }
 
 // 调用发送短信
 // 需要设置 AccessKeyId 和 AccessSecret 参数
+// @param signName 短信签名
+// @param tempCode 短信模板Code
+// @param phones 15123279507 短信接收号码
+// 	 支持以逗号分隔的形式进行批量调用，批量上限为1000个手机号码,
+// 	 批量调用相对于单条调用及时性稍有延迟,验证码类型的短信推荐使用单条调用的方式；
+// 	 发送国际/港澳台消息时，接收号码格式为：国际区号+号码，如“85200000000”
+// @param outId 调用方回调唯一识别ID
+// @param params 短信模板内的参数
+// @return 请求调用响应
 func (sender *MessageSender) SendMsg(signName, tempCode, phones, outId string,
 	params map[string]string) SendSmsResponse {
 	return SendMsg(sender.Protocol, sender.Domain, sender.RegionId,
@@ -126,10 +139,20 @@ func (sender *MessageSender) SendMsg(signName, tempCode, phones, outId string,
 }
 
 // 使用部分默认配置进行短信请求发送
-// @param phones	String	必须	 15123279507 短信接收号码
+// @param protocol 请求协议
+// @param domain 请求域名
+// @param regionId 请求地区节点ID
+// @param accKey AccessKey
+// @param accSecret AccessSecret
+// @param signName 短信签名
+// @param tempCode 短信模板Code
+// @param phones 15123279507 短信接收号码
 // 	 支持以逗号分隔的形式进行批量调用，批量上限为1000个手机号码,
 // 	 批量调用相对于单条调用及时性稍有延迟,验证码类型的短信推荐使用单条调用的方式；
 // 	 发送国际/港澳台消息时，接收号码格式为：国际区号+号码，如“85200000000”
+// @param outId 调用方回调唯一识别ID
+// @param params 短信模板内的参数
+// @return 请求调用响应
 func SendMsg(protocol, domain, regionId, accKey, accSecret, signName, tempCode, phones, outId string,
 	params map[string]string) SendSmsResponse {
 	//1.封装参数
@@ -158,6 +181,8 @@ func SendMsg(protocol, domain, regionId, accKey, accSecret, signName, tempCode, 
 }
 
 // 请求短信发送并返回响应
+// @param requestUri 请求地址
+// @return 短信发送响应
 func requestSendMsg(requestUri string) SendSmsResponse {
 	httpClient := http.DefaultClient
 	response, err := httpClient.Get(requestUri)
@@ -171,6 +196,8 @@ func requestSendMsg(requestUri string) SendSmsResponse {
 }
 
 // 处理请求响应
+// @param readCloser 请求响应读取流
+// @return 短信发送响应
 func resolveResp(readCloser io.ReadCloser) SendSmsResponse {
 	buffer := []byte{0}
 	content := ""
@@ -199,6 +226,8 @@ func resolveResp(readCloser io.ReadCloser) SendSmsResponse {
 // 生成待签名字符串
 // 按POP的签名规则拼接成最终的待签名串，规则如下：
 // - HTTPMethod + “&” + specialUrlEncode(“/”) + ”&” + specialUrlEncode(sortedQueryString)
+// @param urlParamsStr URL参数
+// @return 按POP的签名规则拼接成最终的待签名串
 func resolveStringToSign(urlParamsStr string) string {
 	stringToSign := "GET&"
 	stringToSign += SpecialUrlEncode("/") + "&"
@@ -207,7 +236,16 @@ func resolveStringToSign(urlParamsStr string) string {
 }
 
 // 将参数封装，并返回字母有序排列映射
-func resolveParamsMap(regionId, accKey, phones, signName, tempCode, outId string, params map[string]string) *treemap.Map {
+// @param regionId 服务器区域ID
+// @param accKey AccessKey
+// @param phones 手机号，多个用“,”号分隔
+// @param signName 短信签名
+// @param tempCode 模板Code
+// @param outId 业务方回调识别ID
+// @param params 短信模板内的参数
+// @return 按字母有序排列映射
+func resolveParamsMap(regionId, accKey, phones, signName, tempCode, outId string,
+	params map[string]string) *treemap.Map {
 	//1.请求参数
 	//2.根据参数Key排序（顺序）字母顺序
 	paramsMap := treemap.NewWithStringComparator()

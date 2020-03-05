@@ -254,7 +254,8 @@ func resolveParamsMap(regionId, accKey, phones, signName, tempCode, outId string
 
 	//1.1 系统参数
 	paramsMap.Put(KeySignatureMethod, DefaultSignatureMethod)
-	paramsMap.Put(KeySignatureNonce, uuid.Must(uuid.NewV4()).String())
+	var e error
+	paramsMap.Put(KeySignatureNonce, uuid.Must(uuid.NewV4(), e).String())
 	paramsMap.Put(KeyAccessKeyId, accKey)
 	paramsMap.Put(KeySignatureVersion, DefaultSignatureVersion)
 	paramsMap.Put(KeyFormat, DefaultFormat)
